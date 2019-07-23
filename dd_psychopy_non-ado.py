@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +5,7 @@ import pandas as pd
 from psychopy import core, visual, event, data, gui
 
 from adopy import Engine
+from adopy.tasks.dd import TaskDD, ModelHyp
 
 ###############################################################################
 # Global variables
@@ -255,6 +255,31 @@ window = visual.Window(size=[1024, 768],
 event.globalKeys.add(key='escape', func=core.quit, name='shutdown')
 
 ###############################################################################
+# Initialization of ADOpy objects (just for parameter estimation)
+###############################################################################
+
+# Create Task and Model objects for the CRA task
+task = TaskDD()
+model = ModelHyp()
+
+# Generate grid for design variables and model parameters
+grid_design = {
+    't_ss': [0],
+    't_ll': [0.43, 0.714, 1, 2, 3, 4.3, 6.44, 8.6, 10.8, 12.9,
+             17.2, 21.5, 26, 52, 104, 156, 260, 520],
+    'r_ss': np.arange(12.5, 800, 12.5),  # [12.5, 25, ..., 787.5]
+    'r_ll': [800]
+}
+
+grid_param = {
+    'k': np.logspace(-5, 0, 50),
+    'tau': np.linspace(0, 2, 50)
+}
+
+# Initialize an engine
+engine = Engine(task, model, grid_design, grid_param)
+
+###############################################################################
 # Prepare designs using the staircase method
 ###############################################################################
 
@@ -283,6 +308,7 @@ show_countdown()
 
 # Shuffle the order of delay values
 np.random.shuffle(delays)
+response = 0
 
 # Run practices
 for trial in range(n_prac):
@@ -340,6 +366,9 @@ for trial in range(n_trial):
     # Run a trial using the design
     is_ll_on_left, key_left, response, rt = run_trial(design)
 
+    # Update the engine (Just for parameter estimation)
+    engine.update(design, response)
+
     # Append the current trial into the DataFrame
     df_data = df_data.append(pd.Series({
         'block': 'main',
@@ -352,6 +381,10 @@ for trial in range(n_trial):
         'key_left': key_left,
         'response': response,
         'rt': rt,
+        'mean_k': engine.post_mean[0],
+        'mean_tau': engine.post_mean[1],
+        'sd_k': engine.post_sd[0],
+        'sd_tau': engine.post_sd[1],
     }), ignore_index=True)
 
     # Save the data into a file
